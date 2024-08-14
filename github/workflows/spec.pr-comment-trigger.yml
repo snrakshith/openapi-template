@@ -1,0 +1,106 @@
+name: Spec Comment Trigger
+# This workflow uploads a copy of the spec with the respective changes in the PR
+# to the team Space when triggered by commenting "!deploy" on the PR.
+#
+# The name of the uploaded file will be prefixed with the PR number.
+# e.g. `spec-ci/previews/123-spec.yaml
+
+on:
+  pull_request_review:
+
+jobs:
+  generate-preview-on-trigger:
+    # Check that the issue is a PR and that the comment starts with "!deploy"
+    if: startsWith(github.event.review.body, '!deploy')
+    name: Generate Preview on Review Comment Trigger
+    runs-on: ubuntu-latest
+    steps:
+    # Ensure that the comment is made by someone in the DigitalOcean org
+    - name: isDigitalOceanMember?
+      id: is-digitalocean-member
+      uses: actions/github-script@v3
+      with:
+        result-encoding: string
+        script: |
+          const organization = 'digitalocean';
+          const user = "${{ github.event.review.user.login }}";
+
+          try {
+              org = await github.orgs.checkMembershipForUser({
+                  org: organization,
+                  username: user,
+              });
+
+              console.log(`${org.headers.status}: ${user} found in ${organization}`);
+              return 'true';
+
+          } catch(err) {
+              console.log(`${err.headers.status}: ${user} not found in ${organization}`);
+              return 'false';
+          };
+
+    - uses: actions/setup-node@v1
+      if: steps.is-digitalocean-member.outputs.result == 'true'
+      with:
+        node-version: '14.x'
+
+    - name: Get PR Branch
+      if: steps.is-digitalocean-member.outputs.result == 'true'
+      id: get-pr-branch
+      uses: actions/github-script@v3
+      with:
+        script: |
+          repository = '${{ github.repository }}'
+          result = await github.pulls.get({
+              owner: repository.split('/')[0],
+              repo: repository.split('/')[1],
+              pull_number: ${{ github.event.pull_request.number }},
+          });
+
+          return result.data.head
+
+    - name: Checkout PR Branch
+      if: steps.is-digitalocean-member.outputs.result == 'true'
+      uses: actions/checkout@v2
+      with:
+        repository: ${{ fromJSON(steps.get-pr-branch.outputs.result).repo.full_name }}
+        ref: ${{ github.event.review.commit_id }}
+
+    - name: Bundle
+      if: steps.is-digitalocean-member.outputs.result == 'true'
+      run: make bundle
+
+    - uses: actions/upload-artifact@v2
+      if: steps.is-digitalocean-member.outputs.result == 'true'
+      with:
+        name: openapi-bundled
+        path: tests/openapi-bundled.yaml
+
+    - name: Upload PR spec
+      if: steps.is-digitalocean-member.outputs.result == 'true'
+      run: >-
+        aws s3 cp tests/openapi-bundled.yaml
+        ${{ env.SPACES_PATH }}/previews/${{ github.event.issue.number }}-spec.yaml
+        --endpoint=${{ env.SPACES_ENDPOINT }}
+        --acl public-read
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_ACCESS_SECRET }}
+        AWS_DEFAULT_OUTPUT: json
+        SPACES_PATH: ${{ secrets.SPACES_PATH }}
+        SPACES_ENDPOINT: ${{ secrets.SPACES_ENDPOINT }}
+        AWS_EC2_METADATA_DISABLED: true
+
+    - name: Comment on PR
+      if: steps.is-digitalocean-member.outputs.result == 'true' && success()
+      uses: actions/github-script@v3
+      with:
+        script: |
+          var previewComment = '🔎 API documentation preview: https://api-engineering.nyc3.digitaloceanspaces.com/spec-ci/redoc-index.html?pr=' + '${{ github.event.pull_request.number }}';
+          var repository = '${{ github.repository }}'
+          github.issues.createComment({
+              issue_number: '${{ github.event.pull_request.number }}',
+              owner: repository.split('/')[0],
+              repo: repository.split('/')[1],
+              body: previewComment
+          });

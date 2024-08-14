@@ -1,0 +1,17 @@
+.DS_Store
+.idea/
+.vscode/
+generated/ 
+!.vscode/extensions.json
+!.vscode/openapi.code-snippets
+node_modules/
+newman/
+newman-results.json
+tests/openapi-bundled.yaml
+tests/postman.json
+tests/postman-temp.json
+*.swp
+*.swo
+python-cg/
+resolved.yaml
+src/

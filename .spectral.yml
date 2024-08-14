@@ -1,0 +1,11 @@
+extends:
+  - [spectral:oas, all]
+  - ./spectral/ruleset.yml
+
+formats: [oas3]
+
+functionsDir: ./spectral/functions
+
+rules:
+  contact-properties: off
+  operation-singular-tag: off
