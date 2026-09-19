@@ -13,7 +13,7 @@
     "test": "make test",
     "lint": "spectral lint",
     "bundle": "openapi bundle",
-    "collection": "openapi2postmanv2",
+    "collection": "openapi2postmanv2 -s specification/DigitalOcean-public.v2.yaml -o collection/DigitalOcean-public.postman_collection.json",
     "autorest": " autorest",
     "newman": "newman run",
     "preview": "openapi preview-docs specification/DigitalOcean-public.v2.yaml",
